@@ -1,19 +1,39 @@
-javascript:(function () {
-
+// ======================
+//  Netflix 控制列注入器（穩定版）
+// ======================
+(function () {
     var ATTR = 'data-ov',
         STYLE = 'ov-style',
         UI_ID = 'ov-ui';
 
-    // --- 移除舊的 UI ---
+    // --- 移除舊的 UI / handler ---
     if (document.getElementById(UI_ID)) {
         try {
             document.getElementById(UI_ID).remove();
             if (window.__ovInterval) clearInterval(window.__ovInterval);
-            if (window.__ovHandlers)
-                window.__ovHandlers.forEach(([t, f]) =>
-                    window.removeEventListener(t, f, true)
+
+            if (window.__ovHandlers) {
+                window.__ovHandlers.forEach(([t, f, tg]) =>
+                    (tg || window).removeEventListener(t, f, true)
                 );
-        } catch (e) { }
+            }
+
+            if (window.__ovClickHandler) {
+                document.removeEventListener('click', window.__ovClickHandler, true);
+                window.__ovClickHandler = null;
+            }
+
+            if (window.__ovKeyBlocker) {
+                window.removeEventListener('keydown', window.__ovKeyBlocker, true);
+                window.__ovKeyBlocker = null;
+            }
+
+            if (window.__ovPlayPauseHandler) {
+                window.removeEventListener('keydown', window.__ovPlayPauseHandler, true);
+                window.__ovPlayPauseHandler = null;
+            }
+        } catch (e) {}
+
         console.log('♻️ 已清除舊控制列，重新建立中...');
     }
 
@@ -50,6 +70,32 @@ javascript:(function () {
         return v[0];
     }
 
+    // --- 安裝「攔 Netflix」的 keydown（不攔自己的 handler） ---
+    if (window.__ovKeyBlocker) {
+        window.removeEventListener('keydown', window.__ovKeyBlocker, true);
+        window.__ovKeyBlocker = null;
+    }
+
+    if (window.__ovPlayPauseHandler) {
+        window.removeEventListener('keydown', window.__ovPlayPauseHandler, true);
+        window.__ovPlayPauseHandler = null;
+    }
+
+    // 延遲一點時間，確保在 Netflix 自己綁完 handler 之後再攔截
+    setTimeout(() => {
+        window.__ovKeyBlocker = function (e) {
+            const keys = [' ', 'ArrowLeft', 'ArrowRight', 'k', 'K', 'j', 'J'];
+            if (!keys.includes(e.key)) return;
+
+            // 阻擋 Netflix 的 handler，不阻擋我們自己後面加的 handler
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        window.addEventListener('keydown', window.__ovKeyBlocker, true);
+        console.log('🎯 KeyBlocker installed AFTER Netflix handlers');
+    }, 300);
+
     // --- Netflix API ---
     function getNF() {
         try {
@@ -64,7 +110,7 @@ javascript:(function () {
     function fmt(t) {
         if (!isFinite(t) || t < 0) return '--:--';
         t |= 0;
-        return ('0' + (t / 60 | 0)).slice(-2) + ':' + ('0' + t % 60).slice(-2);
+        return ('0' + ((t / 60) | 0)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2);
     }
 
     function seekTo(sec) {
@@ -77,10 +123,8 @@ javascript:(function () {
 
         try {
             if (was) v.play();
-            if (p && p.seek)
-                p.seek(t * 1000);
-            else
-                v.currentTime = t;
+            if (p && p.seek) p.seek(t * 1000);
+            else v.currentTime = t;
 
             setTimeout(() => was && v.pause(), 200);
         } catch {
@@ -94,7 +138,6 @@ javascript:(function () {
 
     // --- 建 UI ---
     if (!document.getElementById(UI_ID)) {
-
         const box = document.createElement('div');
         box.id = UI_ID;
         Object.assign(box.style, {
@@ -226,7 +269,7 @@ javascript:(function () {
         bar.append(btn, rng, tm, ic, vol, fs, tip);
 
         const sty = document.createElement('style');
-        sty.textContent = `${styleThumb}`;
+        sty.textContent = styleThumb;
         sh.append(sty, bar);
 
         // --- 狀態 ---
@@ -258,7 +301,7 @@ javascript:(function () {
                 volVal = Math.round(v.volume * 100);
 
             if (mute !== lastMute || volVal !== lastVol) {
-                ic.style.opacity = (mute || volVal === 0) ? '0.4' : '1';
+                ic.style.opacity = mute || volVal === 0 ? '0.4' : '1';
                 ic.title = mute ? 'Muted' : `Volume: ${volVal}%`;
 
                 vol.value = volVal;
@@ -275,16 +318,22 @@ javascript:(function () {
             const v = getVideo();
             if (!v) return;
 
-            const d = v.duration || 0,
-                c = v.currentTime || 0;
+            const d = v.duration || 0;
+            const c = v.currentTime || 0;
 
-            const percent = isFinite(d) ? Math.min(1000, c / d * 1000) : 0;
+            const percent = isFinite(d) ? Math.min(1000, (c / d) * 1000) : 0;
 
             rng.value = percent;
             setRangeGradient(rng, percent / 1000);
 
             tm.textContent = `${fmt(c)} / ${fmt(d)}`;
             syncVol(v);
+
+            if (v.paused) {
+                if (btn.textContent !== '播放 ▶') btn.textContent = '播放 ▶';
+            } else {
+                if (btn.textContent !== '暫停 ⏸') btn.textContent = '暫停 ⏸';
+            }
         }
 
         window.__ovInterval = setInterval(update, 500);
@@ -350,12 +399,17 @@ javascript:(function () {
         };
 
         fs.onclick = () => {
-            !document.fullscreenElement
-                ? (getVideo()?.parentElement || document.documentElement).requestFullscreen?.()
-                : document.exitFullscreen?.();
+            if (!document.fullscreenElement) {
+                (getVideo()?.parentElement || document.documentElement)
+                    .requestFullscreen?.();
+            } else {
+                document.exitFullscreen?.();
+            }
         };
 
         btn.onclick = () => {
+            btn.blur(); // 避免 button focus 讓空白鍵打到它
+
             const v = getVideo();
             if (!v) return;
 
@@ -371,7 +425,7 @@ javascript:(function () {
         function setTipByPercent(p, dur) {
             const rectBar = bar.getBoundingClientRect();
             const rectR = rng.getBoundingClientRect();
-            const x = (rectR.left - rectBar.left) + p * rectR.width;
+            const x = rectR.left - rectBar.left + p * rectR.width;
             tip.style.left = x + 'px';
             tip.textContent = fmt(dur * p);
             tip.style.opacity = '1';
@@ -427,9 +481,10 @@ javascript:(function () {
             setTipByPercent(p, d);
         });
 
-        document.addEventListener('click', e => {
-            const v = getVideo(),
-                p = document.querySelector('[data-uia="player"]');
+        // 影片區域單擊：播放 / 暫停
+        window.__ovClickHandler = function (e) {
+            const v = getVideo();
+            const p = document.querySelector('[data-uia="player"]');
 
             if (!v || !p) return;
 
@@ -446,17 +501,18 @@ javascript:(function () {
 
                 resetHide();
             }
-        }, true);
+        };
 
-        window.addEventListener('keydown', e => {
+        document.addEventListener('click', window.__ovClickHandler, true);
+
+        // 我自己的鍵盤控制 handler
+        window.__ovPlayPauseHandler = function (e) {
             const v = getVideo();
             if (!v) return;
 
-            if (e.shiftKey && e.key.toUpperCase() === 'X') {
-                box.remove();
-                clearInterval(window.__ovInterval);
-                document.body.style.cursor = 'default';
-                return;
+            if (e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
             }
 
             let step = e.shiftKey ? 60 : 10;
@@ -473,18 +529,18 @@ javascript:(function () {
                         btn.textContent = '播放 ▶';
                     }
                     break;
-
                 case 'ArrowRight':
                     seekTo(v.currentTime + step);
                     break;
-
                 case 'ArrowLeft':
                     seekTo(v.currentTime - step);
                     break;
             }
 
             resetHide();
-        }, true);
+        };
+
+        window.addEventListener('keydown', window.__ovPlayPauseHandler, true);
 
         document.addEventListener('fullscreenchange', () =>
             setTimeout(() => {
@@ -498,12 +554,13 @@ javascript:(function () {
         console.clear();
         console.log('%c🎬 Netflix 控制列已載入 ✅', 'color:lime;font-weight:bold;');
         console.log('%c🖱 單擊影片：播放/暫停；雙擊：原生全螢幕', 'color:cyan;');
-        console.log('Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列');
+        console.log(
+            'Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列（如果你之後要自己加可以再擴充）'
+        );
     }
 
     // --- 隱藏阻擋的 overlay ---
     [...document.querySelectorAll(
         "div[data-no-focus-lock='true'], div[data-uia*='modal'], div[class*='interstitial'], div[class*='focus-trap'], div[role='dialog']"
     )].forEach(e => e.setAttribute(ATTR, '1'));
-
 })();
