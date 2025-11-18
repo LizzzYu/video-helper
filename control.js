@@ -1,40 +1,31 @@
-// version: 1.3.1
-
 // ======================
-// 控制列注入器（穩定版）
+// 控制列注入器 v1.3.1
 // ======================
 (function () {
+
     var ATTR = 'data-ov',
         STYLE = 'ov-style',
         UI_ID = 'ov-ui';
 
-    // --- 移除舊的 UI / handler ---
+    // --- 移除舊的 UI ---
     if (document.getElementById(UI_ID)) {
         try {
             document.getElementById(UI_ID).remove();
             if (window.__ovInterval) clearInterval(window.__ovInterval);
 
-            if (window.__ovHandlers) {
+            // 移除所有 mousemove / keydown / click handler
+            if (window.__ovHandlers)
                 window.__ovHandlers.forEach(([t, f, tg]) =>
                     (tg || window).removeEventListener(t, f, true)
                 );
-            }
 
+            // ⭐⭐⭐ 新增：移除上一輪的 click handler（最重要的修復）
             if (window.__ovClickHandler) {
                 document.removeEventListener('click', window.__ovClickHandler, true);
                 window.__ovClickHandler = null;
             }
 
-            if (window.__ovKeyBlocker) {
-                window.removeEventListener('keydown', window.__ovKeyBlocker, true);
-                window.__ovKeyBlocker = null;
-            }
-
-            if (window.__ovPlayPauseHandler) {
-                window.removeEventListener('keydown', window.__ovPlayPauseHandler, true);
-                window.__ovPlayPauseHandler = null;
-            }
-        } catch (e) {}
+        } catch (e) { }
 
         console.log('♻️ 已清除舊控制列，重新建立中...');
     }
@@ -72,7 +63,7 @@
         return v[0];
     }
 
-    // --- 安裝「攔 原生」的 keydown（不攔自己的 handler） ---
+    // --- 移除舊的 KeyBlocker ---
     if (window.__ovKeyBlocker) {
         window.removeEventListener('keydown', window.__ovKeyBlocker, true);
         window.__ovKeyBlocker = null;
@@ -83,19 +74,23 @@
         window.__ovPlayPauseHandler = null;
     }
 
-    // 延遲一點時間，確保在原生播放器自己綁完 handler 之後再攔截
+    // --- 延遲安裝空白鍵攔截器，確保覆蓋原生的 handler ---
     setTimeout(() => {
+
         window.__ovKeyBlocker = function (e) {
+
             const keys = [' ', 'ArrowLeft', 'ArrowRight', 'k', 'K', 'j', 'J'];
+
             if (!keys.includes(e.key)) return;
 
-            // 阻擋原生的 handler，不阻擋我們自己後面加的 handler
             e.preventDefault();
             e.stopPropagation();
         };
 
         window.addEventListener('keydown', window.__ovKeyBlocker, true);
-        console.log('🎯 KeyBlocker installed AFTER Original handlers');
+
+        console.log("🎯 KeyBlocker installed AFTER Original handlers");
+
     }, 300);
 
     // --- API ---
@@ -112,7 +107,7 @@
     function fmt(t) {
         if (!isFinite(t) || t < 0) return '--:--';
         t |= 0;
-        return ('0' + ((t / 60) | 0)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2);
+        return ('0' + (t / 60 | 0)).slice(-2) + ':' + ('0' + t % 60).slice(-2);
     }
 
     function seekTo(sec) {
@@ -125,8 +120,10 @@
 
         try {
             if (was) v.play();
-            if (p && p.seek) p.seek(t * 1000);
-            else v.currentTime = t;
+            if (p && p.seek)
+                p.seek(t * 1000);
+            else
+                v.currentTime = t;
 
             setTimeout(() => was && v.pause(), 200);
         } catch {
@@ -140,6 +137,7 @@
 
     // --- 建 UI ---
     if (!document.getElementById(UI_ID)) {
+
         const box = document.createElement('div');
         box.id = UI_ID;
         Object.assign(box.style, {
@@ -179,7 +177,7 @@
             z-index: 9999;
         `;
 
-        const styleThumb = `
+                const styleThumb = `
             ::-webkit-slider-thumb {
                 appearance: none;
                 width: 8px;
@@ -249,7 +247,7 @@
             flex-shrink: 0;
         `;
 
-        fs.textContent = '⛶';
+                fs.textContent = '⛶';
         fs.style.cssText =
             'all:unset;cursor:pointer;background:#111;color:#fff;padding:6px 10px;border-radius:6px;flex-shrink:0';
 
@@ -271,7 +269,7 @@
         bar.append(btn, rng, tm, ic, vol, fs, tip);
 
         const sty = document.createElement('style');
-        sty.textContent = styleThumb;
+        sty.textContent = `${styleThumb}`;
         sh.append(sty, bar);
 
         // --- 狀態 ---
@@ -296,14 +294,14 @@
                 `linear-gradient(to right, ${ACTIVE} ${p * 100}%, ${INACTIVE} ${p * 100}%)`;
         }
 
-        function syncVol(v) {
+                function syncVol(v) {
             if (!v) return;
 
             const mute = v.muted,
                 volVal = Math.round(v.volume * 100);
 
             if (mute !== lastMute || volVal !== lastVol) {
-                ic.style.opacity = mute || volVal === 0 ? '0.4' : '1';
+                ic.style.opacity = (mute || volVal === 0) ? '0.4' : '1';
                 ic.title = mute ? 'Muted' : `Volume: ${volVal}%`;
 
                 vol.value = volVal;
@@ -320,10 +318,10 @@
             const v = getVideo();
             if (!v) return;
 
-            const d = v.duration || 0;
-            const c = v.currentTime || 0;
+            const d = v.duration || 0,
+                  c = v.currentTime || 0;
 
-            const percent = isFinite(d) ? Math.min(1000, (c / d) * 1000) : 0;
+            const percent = isFinite(d) ? Math.min(1000, c / d * 1000) : 0;
 
             rng.value = percent;
             setRangeGradient(rng, percent / 1000);
@@ -331,11 +329,8 @@
             tm.textContent = `${fmt(c)} / ${fmt(d)}`;
             syncVol(v);
 
-            if (v.paused) {
-                if (btn.textContent !== '播放 ▶') btn.textContent = '播放 ▶';
-            } else {
-                if (btn.textContent !== '暫停 ⏸') btn.textContent = '暫停 ⏸';
-            }
+            // ⭐ 同步按鈕文字
+            btn.textContent = v.paused ? '播放 ▶' : '暫停 ⏸';
         }
 
         window.__ovInterval = setInterval(update, 500);
@@ -359,7 +354,7 @@
             hideTimer = setTimeout(uiHide, 3000);
         }
 
-        const act = () => resetHide();
+                const act = () => resetHide();
 
         window.__ovHandlers = [
             ['mousemove', act],
@@ -385,33 +380,28 @@
         };
 
         vol.oninput = () => {
-            const player = document.querySelector('[data-uia="player"]');
-            const old = window.__ovLastVolVal ?? 50;
+            const v = getVideo();
+            if (!v) return;
+
             const newVal = parseFloat(vol.value);
-            const delta = newVal - old;
-            window.__ovLastVolVal = newVal;
+            const volPercent = Math.max(0, Math.min(100, newVal));
 
-            const dir = delta > 0 ? -100 : 100;
+            v.volume = volPercent / 100;
+            v.muted = volPercent === 0;
 
-            setVolGradientByValue(newVal, false);
+            setVolGradientByValue(volPercent, v.muted);
 
-            player?.dispatchEvent(
-                new WheelEvent('wheel', { deltaY: dir, bubbles: true })
-            );
+            window.__ovLastVolVal = volPercent;
         };
 
         fs.onclick = () => {
-            if (!document.fullscreenElement) {
-                (getVideo()?.parentElement || document.documentElement)
-                    .requestFullscreen?.();
-            } else {
-                document.exitFullscreen?.();
-            }
+            !document.fullscreenElement
+                ? (getVideo()?.parentElement || document.documentElement).requestFullscreen?.()
+                : document.exitFullscreen?.();
         };
 
         btn.onclick = () => {
-            btn.blur(); // 避免 button focus 讓空白鍵打到它
-
+            btn.blur(); // 避免空白鍵觸發兩次
             const v = getVideo();
             if (!v) return;
 
@@ -424,14 +414,14 @@
             }
         };
 
-        function setTipByPercent(p, dur) {
-            const rectBar = bar.getBoundingClientRect();
-            const rectR = rng.getBoundingClientRect();
-            const x = rectR.left - rectBar.left + p * rectR.width;
-            tip.style.left = x + 'px';
-            tip.textContent = fmt(dur * p);
-            tip.style.opacity = '1';
-        }
+       function setTipByPercent(p, dur) {
+    const rectR = rng.getBoundingClientRect();
+    const x = p * rectR.width;
+
+    tip.style.left = `${rectR.left + x - box.getBoundingClientRect().left}px`;
+    tip.textContent = fmt(dur * p);
+    tip.style.opacity = '1';
+}
 
         rng.addEventListener('input', () => {
             dragging = true;
@@ -483,10 +473,10 @@
             setTipByPercent(p, d);
         });
 
-        // 影片區域單擊：播放 / 暫停
+                // ⭐⭐⭐ 修正：單擊播放/暫停不會被多次綁定的 handler 影響
         window.__ovClickHandler = function (e) {
-            const v = getVideo();
-            const p = document.querySelector('[data-uia="player"]');
+            const v = getVideo(),
+                  p = document.querySelector('[data-uia="player"]');
 
             if (!v || !p) return;
 
@@ -507,7 +497,7 @@
 
         document.addEventListener('click', window.__ovClickHandler, true);
 
-        // 我自己的鍵盤控制 handler
+        // ⭐⭐⭐ 空白鍵 / K / ← → 控制（獨立 handler，確保可被清除）
         window.__ovPlayPauseHandler = function (e) {
             const v = getVideo();
             if (!v) return;
@@ -531,9 +521,11 @@
                         btn.textContent = '播放 ▶';
                     }
                     break;
+
                 case 'ArrowRight':
                     seekTo(v.currentTime + step);
                     break;
+
                 case 'ArrowLeft':
                     seekTo(v.currentTime - step);
                     break;
@@ -544,6 +536,7 @@
 
         window.addEventListener('keydown', window.__ovPlayPauseHandler, true);
 
+        // ⭐⭐ 全螢幕修正
         document.addEventListener('fullscreenchange', () =>
             setTimeout(() => {
                 if (document.fullscreenElement)
@@ -556,13 +549,12 @@
         console.clear();
         console.log('%c🎬 控制列已載入 ✅', 'color:lime;font-weight:bold;');
         console.log('%c🖱 單擊影片：播放/暫停；雙擊：原生全螢幕', 'color:cyan;');
-        console.log(
-            'Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列'
-        );
+        console.log('Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列');
     }
 
     // --- 隱藏阻擋的 overlay ---
     [...document.querySelectorAll(
         "div[data-no-focus-lock='true'], div[data-uia*='modal'], div[class*='interstitial'], div[class*='focus-trap'], div[role='dialog']"
     )].forEach(e => e.setAttribute(ATTR, '1'));
+
 })();
