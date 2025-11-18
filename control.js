@@ -1,5 +1,7 @@
+// version: 1.3.1
+
 // ======================
-//  Netflix 控制列注入器（穩定版）
+// 控制列注入器（穩定版）
 // ======================
 (function () {
     var ATTR = 'data-ov',
@@ -70,7 +72,7 @@
         return v[0];
     }
 
-    // --- 安裝「攔 Netflix」的 keydown（不攔自己的 handler） ---
+    // --- 安裝「攔 原生」的 keydown（不攔自己的 handler） ---
     if (window.__ovKeyBlocker) {
         window.removeEventListener('keydown', window.__ovKeyBlocker, true);
         window.__ovKeyBlocker = null;
@@ -81,22 +83,22 @@
         window.__ovPlayPauseHandler = null;
     }
 
-    // 延遲一點時間，確保在 Netflix 自己綁完 handler 之後再攔截
+    // 延遲一點時間，確保在原生播放器自己綁完 handler 之後再攔截
     setTimeout(() => {
         window.__ovKeyBlocker = function (e) {
             const keys = [' ', 'ArrowLeft', 'ArrowRight', 'k', 'K', 'j', 'J'];
             if (!keys.includes(e.key)) return;
 
-            // 阻擋 Netflix 的 handler，不阻擋我們自己後面加的 handler
+            // 阻擋原生的 handler，不阻擋我們自己後面加的 handler
             e.preventDefault();
             e.stopPropagation();
         };
 
         window.addEventListener('keydown', window.__ovKeyBlocker, true);
-        console.log('🎯 KeyBlocker installed AFTER Netflix handlers');
+        console.log('🎯 KeyBlocker installed AFTER Original handlers');
     }, 300);
 
-    // --- Netflix API ---
+    // --- API ---
     function getNF() {
         try {
             const c = window.netflix?.appContext?.state.playerApp.getAPI();
@@ -552,10 +554,10 @@
         );
 
         console.clear();
-        console.log('%c🎬 Netflix 控制列已載入 ✅', 'color:lime;font-weight:bold;');
+        console.log('%c🎬 控制列已載入 ✅', 'color:lime;font-weight:bold;');
         console.log('%c🖱 單擊影片：播放/暫停；雙擊：原生全螢幕', 'color:cyan;');
         console.log(
-            'Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列（如果你之後要自己加可以再擴充）'
+            'Space/K：播放/暫停 | ←/→：10s | Hover 顯示時間 | 音量雙色 | Shift+X：關閉控制列'
         );
     }
 
