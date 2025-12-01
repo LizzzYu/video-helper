@@ -2,9 +2,9 @@
 // 控制列注入器 v1.4.1
 // ======================
 ;(function () {
-	var ATTR = 'data-ov',
-		STYLE = 'ov-style',
-		UI_ID = 'ov-ui'
+	var ATTR = 'data-ov'
+	var STYLE = 'ov-style'
+	var UI_ID = 'ov-ui'
 
 	// --- 移除舊的 UI ---
 	if (document.getElementById(UI_ID)) {
@@ -13,10 +13,11 @@
 			if (window.__ovInterval) clearInterval(window.__ovInterval)
 
 			// 移除所有 mousemove / keydown / click handler
-			if (window.__ovHandlers)
+			if (window.__ovHandlers) {
 				window.__ovHandlers.forEach(([t, f, tg]) =>
 					(tg || window).removeEventListener(t, f, true)
 				)
+			}
 
 			// 移除上一輪的 click handler
 			if (window.__ovClickHandler) {
@@ -89,7 +90,7 @@
 		console.log('🎯 KeyBlocker installed AFTER Original handlers')
 	}, 300)
 
-	// --- API ---
+	// --- Netflix API helper ---
 	function getNF() {
 		try {
 			const c = window.netflix?.appContext?.state.playerApp.getAPI()
@@ -100,19 +101,21 @@
 		}
 	}
 
+	// --- 時間格式化 (秒 → mm:ss) ---
 	function fmt(t) {
 		if (!isFinite(t) || t < 0) return '--:--'
 		t |= 0
 		return ('0' + ((t / 60) | 0)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2)
 	}
 
+	// --- 跳轉到指定秒數 ---
 	function seekTo(sec) {
-		const p = getNF(),
-			v = getVideo()
+		const p = getNF()
+		const v = getVideo()
 		if (!v) return
 
-		const t = Math.max(0, Math.min(sec, v.duration)),
-			was = v.paused
+		const t = Math.max(0, Math.min(sec, v.duration))
+		const was = v.paused
 
 		try {
 			if (was) v.play()
@@ -125,9 +128,9 @@
 		}
 	}
 
-	const ACTIVE = '#e50914',
-		INACTIVE = '#555',
-		VOL_MUTE = '#444'
+	const ACTIVE = '#e50914'
+	const INACTIVE = '#555'
+	const VOL_MUTE = '#444'
 
 	// ==============================
 	// NFPlaybackState helpers
@@ -232,30 +235,31 @@
 		const tip = document.createElement('div')
 		const skipIntroBtn = document.createElement('button')
 		const homeBtn = document.createElement('button')
-const nextEpBtn = document.createElement('button')
+		const nextEpBtn = document.createElement('button')
 
-homeBtn.textContent = 'Home'
-homeBtn.style.cssText = `
-    all: unset;
-    cursor: pointer;
-    background: #444;
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 6px;
-    flex-shrink: 0;
-`
+		// --- Home / Next Ep button base style ---
+		homeBtn.textContent = 'Home'
+		homeBtn.style.cssText = `
+            all: unset;
+            cursor: pointer;
+            background: #444;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        `
 
-// --- 下一集功能 (API → fallback DOM)
-nextEpBtn.textContent = 'Next ▶'
-nextEpBtn.style.cssText = `
-    all: unset;
-    cursor: pointer;
-    background: #666;
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 6px;
-    flex-shrink: 0;
-`
+		// 下一集功能 (API → fallback DOM → 最後用 URL +1 規則)
+		nextEpBtn.textContent = 'Next ▶'
+		nextEpBtn.style.cssText = `
+            all: unset;
+            cursor: pointer;
+            background: #666;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        `
 
 		tip.style.cssText = `
             position: absolute;
@@ -375,17 +379,17 @@ nextEpBtn.style.cssText = `
         `
 
 		bar.append(
-    homeBtn,
-    btn,
-    rng,
-    tm,
-    ic,
-    vol,
-    fs,
-    skipIntroBtn,
-    nextEpBtn,
-    tip
-)
+			homeBtn,
+			btn,
+			rng,
+			tm,
+			ic,
+			vol,
+			fs,
+			skipIntroBtn,
+			nextEpBtn,
+			tip
+		)
 
 		const sty = document.createElement('style')
 		sty.textContent = `${styleThumb}`
@@ -405,7 +409,9 @@ nextEpBtn.style.cssText = `
 			if (!playback) {
 				// 只 log 一次就好
 				if (!triedInitSkip) {
-					console.warn('目前找不到可跳過的片段（NFPlaybackState 不存在或無有效 entry）')
+					console.warn(
+						'目前找不到可跳過的片段（NFPlaybackState 不存在或無有效 entry）'
+					)
 				}
 				triedInitSkip = true
 				return false
@@ -427,9 +433,9 @@ nextEpBtn.style.cssText = `
 			triedInitSkip = true
 
 			console.log(
-				`⏭ 偵測到可跳片段 type=${seg.type}, start=${seg.startOffsetMs}ms, end=${seg.endOffsetMs}ms (~${(
-					skipEndSec | 0
-				)}s)`
+				`⏭ 偵測到可跳片段 type=${seg.type}, start=${seg.startOffsetMs}ms, end=${
+					seg.endOffsetMs
+				}ms (~${(skipEndSec | 0)}s)`
 			)
 
 			return true
@@ -449,59 +455,62 @@ nextEpBtn.style.cssText = `
 			skipIntroBtn.style.display = 'none'
 		}
 
+		// ==========================
+		// Home / Next Episode 行為
+		// ==========================
 		homeBtn.onclick = () => {
-    window.location.href = 'https://www.netflix.com/browse'
-}
+			window.location.href = 'https://www.netflix.com/browse'
+		}
 
-async function checkNextEpisodeExists(nextId) {
-    try {
-        const res = await fetch(`https://www.netflix.com/watch/${nextId}`, {
-            method: "GET",
-            mode: "no-cors",
-            cache: "no-store"
-        });
+		async function checkNextEpisodeExists(nextId) {
+			try {
+				const res = await fetch(`https://www.netflix.com/watch/${nextId}`, {
+					method: 'GET',
+					mode: 'no-cors',
+					cache: 'no-store',
+				})
 
-        // no-cors 會回 opaque response → res.type === "opaque"
-        // 代表成功（影片存在）
-        if (res.type === "opaque") return true;
+				// no-cors 會回 opaque response → res.type === "opaque"
+				// 代表成功（影片存在）
+				if (res.type === 'opaque') return true
 
-        // 若不是 opaque，則 fallback 判斷 res.ok
-        return res.ok;
-    } catch (e) {
-        return false; // 404 / DNS 會走到這裡
-    }
-}
+				// 若不是 opaque，則 fallback 判斷 res.ok
+				return res.ok
+			} catch (e) {
+				// 404 / DNS 會走到這裡
+				return false
+			}
+		}
 
-nextEpBtn.onclick = async () => {
-    try {
-        const url = new URL(location.href)
-        const current = Number(url.pathname.split("/watch/")[1])
-        const next = current + 1
+		nextEpBtn.onclick = async () => {
+			try {
+				const url = new URL(location.href)
+				const current = Number(url.pathname.split('/watch/')[1])
+				const next = current + 1
 
-        // 檢查是否存在下一集
-        const exists = await checkNextEpisodeExists(next)
+				// 檢查是否存在下一集
+				const exists = await checkNextEpisodeExists(next)
 
-        if (!exists) {
-            nextEpBtn.textContent = "No Next"
-            setTimeout(() => (nextEpBtn.textContent = "Next ▶"), 1500)
-            return
-        }
+				if (!exists) {
+					nextEpBtn.textContent = 'No Next'
+					setTimeout(() => (nextEpBtn.textContent = 'Next ▶'), 1500)
+					return
+				}
 
-        // 跳轉下一集
-        location.href = `https://www.netflix.com/watch/${next}?trackId=14170289`
-
-    } catch (err) {
-        console.warn(err)
-        nextEpBtn.textContent = "Error"
-        setTimeout(() => (nextEpBtn.textContent = "Next ▶"), 1500)
-    }
-}
+				// 跳轉下一集（沿用你發現的 +1 規則）
+				location.href = `https://www.netflix.com/watch/${next}?trackId=14170289`
+			} catch (err) {
+				console.warn(err)
+				nextEpBtn.textContent = 'Error'
+				setTimeout(() => (nextEpBtn.textContent = 'Next ▶'), 1500)
+			}
+		}
 
 		// --- 狀態 ---
-		let hideTimer = null,
-			lastVol = -1,
-			lastMute = null,
-			dragging = false
+		let hideTimer = null
+		let lastVol = -1
+		let lastMute = null
+		let dragging = false
 
 		function setRangeGradient(el, percent) {
 			el.style.background = `linear-gradient(to right, ${ACTIVE} ${
@@ -511,7 +520,12 @@ nextEpBtn.onclick = async () => {
 
 		function setVolGradientByValue(val, muted) {
 			if (muted) {
-				vol.style.background = `linear-gradient(to right, ${VOL_MUTE} 0%, ${VOL_MUTE} 100%)`
+				vol.style.background =
+					'linear-gradient(to right, ' +
+					VOL_MUTE +
+					' 0%, ' +
+					VOL_MUTE +
+					' 100%)'
 				return
 			}
 			const p = Math.max(0, Math.min(100, val)) / 100
@@ -523,8 +537,8 @@ nextEpBtn.onclick = async () => {
 		function syncVol(v) {
 			if (!v) return
 
-			const mute = v.muted,
-				volVal = Math.round(v.volume * 100)
+			const mute = v.muted
+			const volVal = Math.round(v.volume * 100)
 
 			if (mute !== lastMute || volVal !== lastVol) {
 				ic.style.opacity = mute || volVal === 0 ? '0.4' : '1'
@@ -544,8 +558,8 @@ nextEpBtn.onclick = async () => {
 			const v = getVideo()
 			if (!v) return
 
-			const d = v.duration || 0,
-				c = v.currentTime || 0
+			const d = v.duration || 0
+			const c = v.currentTime || 0
 
 			const percent = isFinite(d) ? Math.min(1000, (c / d) * 1000) : 0
 
@@ -557,7 +571,7 @@ nextEpBtn.onclick = async () => {
 
 			btn.textContent = v.paused ? '播放 ▶' : '暫停 ⏸'
 
-			// ⭐ 根據當前時間動態顯示 / 隱藏 Skip Intro
+			// 根據當前時間動態顯示 / 隱藏 Skip Intro
 			if (ensureSkipSegment()) {
 				if (v.currentTime >= skipEndSec - 0.2) {
 					skipIntroBtn.style.display = 'none'
@@ -710,8 +724,8 @@ nextEpBtn.onclick = async () => {
 
 		// 單擊播放/暫停不會被多次綁定的 handler 影響
 		window.__ovClickHandler = function (e) {
-			const v = getVideo(),
-				p = document.querySelector('[data-uia="player"]')
+			const v = getVideo()
+			const p = document.querySelector('[data-uia="player"]')
 
 			if (!v || !p) return
 
@@ -756,11 +770,9 @@ nextEpBtn.onclick = async () => {
 						btn.textContent = '播放 ▶'
 					}
 					break
-
 				case 'ArrowRight':
 					seekTo(v.currentTime + step)
 					break
-
 				case 'ArrowLeft':
 					seekTo(v.currentTime - step)
 					break
